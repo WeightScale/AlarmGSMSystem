@@ -3,7 +3,7 @@
 
 BatteryClass* BATTERY;
 
-BatteryClass::BatteryClass() : Task(60000) {
+BatteryClass::BatteryClass() : Task(600000) {
 	/* 20 Обновляем заряд батареи */
 	onRun([](){
 		BATTERY->fetchCharge();

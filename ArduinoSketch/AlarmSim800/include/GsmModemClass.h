@@ -42,8 +42,7 @@ private:
 	uint32_t _baud;
 	uint8_t _timeout;
 	String _buffer;
-	HandleCallAccept _handleAccept;
-	String _readSerial(uint32_t timeout);
+	HandleCallAccept _handleAccept;	
 	bool _checkResponse(String ask, uint16_t timeout = TIME_OUT_READ_SERIAL);
 	String _getResponse(String ask, uint16_t timeout = TIME_OUT_READ_SERIAL);
 	String _readSerialUtil(char terminator, uint16_t timeout);
@@ -51,7 +50,8 @@ private:
 public:	
 	GsmModemClass();
 	int timedRead();
-	String _readSerial();
+	String _readSerial(uint32_t timeout = 50);
+	//String _readSerial();
 	void start();
 	void reset();
 	bool setFullMode();
@@ -64,9 +64,10 @@ public:
 	bool sendSMS(const char* number, uint8_t* text);
 	String getSMS(uint8_t index);
 	void processSMS(const String );
-	String sendATCommand(String cmd, bool waiting, uint32_t timeout = TIME_OUT_READ_SERIAL);
+	String sendATCommand(const String& cmd, bool waiting, uint32_t timeout = TIME_OUT_READ_SERIAL);
 	void onCallAccept(HandleCallAccept accept) {_handleAccept = accept;};
 	void doCall(const String& phone, uint16_t timeout);
+	
 };
 
 extern GsmModemClass GsmModem;

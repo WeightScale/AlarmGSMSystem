@@ -1,4 +1,5 @@
 ﻿#include "GsmModemClass.h"
+#include <avr/wdt.h>
 
 GsmModemClass GsmModem;
 //HardwareSerial ser(&UBRR1H, &UBRR1L, &UCSR1A, &UCSR1B, &UCSR1C, &UDR1);
@@ -20,14 +21,15 @@ void GsmModemClass::start() {
 	Serial1.begin(_baud);
 	
 	reset();
-	while (sendATCommand(F("AT\r"), true).indexOf("OK") == -1) {};
+	while (sendATCommand(F("AT"), true).indexOf("OK") == -1) {};
 	while(!echoOff());	
-	while (sendATCommand(F("AT+CLIP=1\r"), true).indexOf("OK") == -1) {};
+	while (sendATCommand(F("AT+CPBS=\"ME\""), true).indexOf("OK") == -1) {};
+	while (sendATCommand(F("AT+CLIP=1"), true).indexOf("OK") == -1) {};
 	while (sendATCommand(F("AT+CMGF=1;&W"), true).indexOf("OK") == -1) {};
 	while (sendATCommand(F("AT+DDET=1"), true).indexOf("OK") == -1) {};
 	while (sendATCommand(F("AT+CLCC=1"), true).indexOf("OK") == -1) {};
 #if RESET_MODE == RESET_MODE1
-	while(sendATCommand(F("AT+CSCLK=1\r\n"), true).indexOf(F("OK")) == -1){};
+	while(sendATCommand(F("AT+CSCLK=1"), true).indexOf(F("OK")) == -1){};
 #endif // RESET_MODE
 }
 
@@ -41,11 +43,11 @@ void GsmModemClass::reset() {
 bool GsmModemClass::setFullMode() {
 	//This set the device to full funcionality - AT+CFUN
 	bool nowReady = false;
-	String str = sendATCommand(F("AT+CFUN?\r"), true);
+	String str = sendATCommand(F("AT+CFUN?"), true);
 	int index = str.indexOf(F("CFUN:"));
 	index = str.substring(index + 6, index + 7).toInt();
 	if (index == 0) {
-		Serial1.print(F("AT+CFUN=1\r"));
+		Serial1.print(F("AT+CFUN=1"));
 		str = _getResponse(F("OK"), 10000);
 		if (str.indexOf(F("READY")) != -1)
 			nowReady = true;
@@ -57,11 +59,11 @@ bool GsmModemClass::setFullMode() {
 
 bool GsmModemClass::enterSleepMode(bool full) {
 	if (full){
-		String str = sendATCommand(F("AT+CFUN?\r"), true);
+		String str = sendATCommand(F("AT+CFUN?"), true);
 		int index = str.indexOf(F("CFUN:"));
 		index = str.substring(index + 6, index + 7).toInt();
 		if (index == 1){
-			Serial1.print(F("AT+CFUN=0\r"));
+			Serial1.print(F("AT+CFUN=0"));
 			str = _getResponse(F("OK"),10000);
 			if (str.indexOf(F("NOT READY")) == -1)
 			return false;
@@ -70,7 +72,7 @@ bool GsmModemClass::enterSleepMode(bool full) {
 #if RESET_MODE == RESET_MODE1
 	digitalWrite(DTR_PIN,HIGH);
 #else if RESET_MODE == RESET_MODE2
-	if(sendATCommand(F("AT+CSCLK=2\r\n"), true).indexOf(F("OK")) == -1)
+	if(sendATCommand(F("AT+CSCLK=2"), true).indexOf(F("OK")) == -1)
 		return false;
 #endif // RESET_MODE		 	 
 	return true;
@@ -83,7 +85,7 @@ bool GsmModemClass::disableSleep(bool full) {
 #else if RESET_MODE == RESET_MODE2
 	Serial1.print(F("FF\r"));
 	delay(300);  // this is between waking charaters and next AT commands	
-	if(sendATCommand(F("AT+CSCLK=0\r"), true).indexOf(F("OK")) == -1)
+	if(sendATCommand(F("AT+CSCLK=0"), true).indexOf(F("OK")) == -1)
 		return false;
 	delay(100);  // just chill for 100ms for things to stablize
 	if(full){
@@ -96,12 +98,12 @@ bool GsmModemClass::disableSleep(bool full) {
 
 // ECHO OFF
 bool GsmModemClass::echoOff() {
-	return sendATCommand(F("ATE0\r"), true).indexOf("OK")!=-1;
+	return sendATCommand(F("ATE0"), true).indexOf("OK")!=-1;
 }
 
 // ECHO ON
 bool GsmModemClass::echoOn() {
-	return sendATCommand(F("ATE1\r"), true).indexOf("OK")!=-1;
+	return sendATCommand(F("ATE1"), true).indexOf("OK")!=-1;
 }
 
 bool GsmModemClass::isReady() {
@@ -171,7 +173,7 @@ void GsmModemClass::doCall(const String& phone, uint16_t timeout) {
 		status = str.substring(index + 11, index + 12).toInt();
 		if (status == 3){
 			timeOld = millis();
-			while (millis() < (timeOld + 6000)) {delay(1); }
+			while (millis() < (timeOld + 6000)) {delay(1); wdt_reset();}
 			break;	
 		}		
 	}
@@ -189,6 +191,7 @@ String GsmModemClass::_getResponse(String ask, uint16_t timeout){
 				break;				  
 		}
 		delay(1);
+		wdt_reset();
 	}
 	return tempData;
 }
@@ -203,7 +206,8 @@ bool GsmModemClass::_checkResponse(String ask, uint16_t timeout){
 			if (tempData.indexOf(ask) != -1)
 				return true;
 		}
-		delay(1);		
+		delay(1);
+		wdt_reset();		
 	}
 	return false;
 }
@@ -240,7 +244,7 @@ String GsmModemClass::_readSerialUtil(char terminator, uint16_t timeout) {
 	return tempData;	
 }
 
-String GsmModemClass::_readSerial() {	
+/*String GsmModemClass::_readSerial() {	
 	String tempData = "";
 	uint64_t timeOld = millis();
 	while (Serial1.available() && !(millis() > (timeOld + 50))) {
@@ -251,26 +255,30 @@ String GsmModemClass::_readSerial() {
 		delay(1);
 	}
 	return tempData;	
-}
+}*/
 
 String GsmModemClass::_readSerial(uint32_t timeout) {	
 	String tempData = "";
 	uint64_t timeOld = millis();
+	wdt_reset();
 	while (Serial1.available() && !(millis() > (timeOld + timeout))) {
 		if (Serial1.available()) {	
 			tempData += (char) Serial1.read();
+			//tempData += Serial1.readString();
 			timeOld = millis();
 		}
 		delay(1);
+		wdt_reset();
 	}
 	return tempData;
 }
 
-String GsmModemClass::sendATCommand(String cmd, bool waiting, uint32_t timeout) {
-	String _resp = "";                                                // Переменная для хранения результата	
+String GsmModemClass::sendATCommand(const String& cmd, bool waiting, uint32_t timeout){
+	String _resp;                                                // Переменная для хранения результата	
 	Serial1.println(cmd);                                               // Отправляем команду модулю
 	if(waiting) {// Если необходимо дождаться ответа...		
 		_resp = _waitResponse(timeout);                                         // ... ждем, когда будет передан ответ
+		//_resp = _readSerial(timeout);
 		// Если Echo Mode выключен (ATE0), то эти 3 строки можно закомментировать
 		if(_resp.startsWith(cmd)) {// Убираем из ответа дублирующуюся команду			
 			_resp = _resp.substring(_resp.indexOf("\r", cmd.length()) + 2);
@@ -283,7 +291,7 @@ String GsmModemClass::_waitResponse(uint32_t timeout) {
 	// Функция ожидания ответа и возврата полученного результата
 	String _resp = "";                                                // Переменная для хранения результата
 	long _timeout = millis() + timeout;                                 // Переменная для отслеживания таймаута (10 секунд)
-	while(!Serial1.available() && millis() < _timeout) {delay(1); };         // Ждем ответа 10 секунд, если пришел ответ или наступил таймаут, то...
+	while(!Serial1.available() && millis() < _timeout) {delay(1); wdt_reset(); };         // Ждем ответа 10 секунд, если пришел ответ или наступил таймаут, то...
 	if(Serial1.available()) {
 		// Если есть, что считывать...
 		_resp = Serial1.readString();                                      // ... считываем и запоминаем

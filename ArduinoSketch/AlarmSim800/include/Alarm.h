@@ -9,6 +9,9 @@
 #define WAKEUP_INT_PIN 15
 #define AL_MAX_QUEUED_MESSAGES 8
 
+#define pci_enable()    PCICR |=(1<<PCIE0)
+#define pci_disable()    PCICR &=~(1<<PCIE0)
+
 typedef enum { AL_MSG_SENDING, AL_MSG_SENT, AL_MSG_ERROR } AlarmMessageStatus;
 class AlarmMessage;
 class AlarmClient;
@@ -95,7 +98,7 @@ public:
 	AlarmClient* curentClient() {return _curentClient;};
 	bool event(){return _event;};
 	void event(bool e){_event = e;};
-	void pinInterrupt();
+	bool pinInterrupt();
 	bool safe(){return _safe;};
 	void safe(bool safe) {_safe = safe;};
 	//bool is_sleep(){return _sleep;};

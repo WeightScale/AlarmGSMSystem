@@ -2,6 +2,7 @@
 #include "GsmModemClass.h"
 #include "Battery.h"
 #include <avr/sleep.h>
+#include <avr/wdt.h>
 
 AlarmClass Alarm;
 
@@ -53,7 +54,7 @@ void AlarmClient::text(const String &message) {
 
 void AlarmClient::call() {
 	GsmModem.onCallAccept([](int value) {
-		GsmModem.sendATCommand(F("ATH\n"), false);
+		GsmModem.sendATCommand(F("ATH"), false);
 		Alarm.event( false);
 	});
 	GsmModem.doCall(_phone, 10000);
@@ -73,8 +74,8 @@ void AlarmClass::begin() {
 	pinMode(WAKEUP_INT_PIN, INPUT);	
 	pinInterrupt();	
 	//attachInterrupt(digitalPinToInterrupt(interruptPin), handleInterrupt, CHANGE);
-	PCICR |=(1<<PCIE0);
-	PCMSK0 |= (1<<PCINT2)|(1<<PCINT1);	
+	PCMSK0 |= (1<<PCINT2)|(1<<PCINT1);
+	pci_enable();		
 }
 
 /*void AlarmClass::interrupt(){
@@ -86,7 +87,7 @@ void AlarmClass::begin() {
 }*/
 
 void AlarmClass::handle() {	
-	pinInterrupt();
+	//pinInterrupt();
 	if (!event()){
 		return;	
 	}		
@@ -98,9 +99,11 @@ void AlarmClass::handle() {
 	//sleep(!GsmModem.disableSleep());
 	//detachInterrupt(interruptPin);
 	_pinInterrupt = debounce(SENSOR_INT_PIN);
-	//digitalWrite(DEFAULT_LED_PIN, LOW);	
+	//digitalWrite(DEFAULT_LED_PIN, LOW);
+	pci_disable();	
 	callAll();
 	textAll(_pinInterrupt ? F("Alarm: Open sensor!!!") : F("Alarm: Closed sensor!!!"));	
+	pci_enable();
 	//interrupt(false);																		//TODO сделать false когда было доставлено сообщения
 	//attachInterrupt(digitalPinToInterrupt(interruptPin), handleInterrupt, CHANGE);
 	//digitalWrite(DEFAULT_LED_PIN, HIGH);
@@ -176,7 +179,7 @@ bool AlarmClass::fetchCall(String& phone) {
 		GsmModem.sendATCommand(F("ATA"), true);                  // ...отвечаем (поднимаем трубку)
 		return true;
 	}else{
-		GsmModem.sendATCommand(F("ATH\n"), false);				//...сбрасываем
+		GsmModem.sendATCommand(F("ATH"), false);				//...сбрасываем
 		return false;
 	}	
 };
@@ -218,7 +221,7 @@ void AlarmClass::waitDTMF(unsigned long timeout){
 			t = millis();
 		}
 	}
-	GsmModem.sendATCommand(F("ATH\n"), false);
+	GsmModem.sendATCommand(F("ATH"), false);
 }
 
 bool AlarmClass::parseDTMF(String& msg) {
@@ -233,7 +236,7 @@ bool AlarmClass::parseDTMF(String& msg) {
 		}		
 		if (command.length() == 3){
 			if (fetchCommand(command)) {// ...выполняем команду
-				GsmModem.sendATCommand(F("ATH\n"), false);
+				GsmModem.sendATCommand(F("ATH"), false);
 				if (_handleCommand)
 					_handleCommand(value);
 				_msgDTMF = "";
@@ -301,14 +304,14 @@ bool AlarmClass::fetchCommand(String cmd) {
 				GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), info.c_str());	
 			});			
 			break;
-		}case 541: {															//уснуть	
+		}/*case 541: {															//уснуть	
 			onCommand([](const String& value) {
 				bool f = (bool)value.toInt();
 				Alarm.sleep(f);
 			});	
 			break;
 		}
-		/*case 542: {																		//проснутся	
+		case 542: {																		//проснутся	
 			onCommand([](const String& value) {
 				Alarm.sleep(false);	
 			});
@@ -327,21 +330,10 @@ bool AlarmClass::createClient(const String& phone){
 
 void AlarmClass::sleep(bool full_mode) {
 	if(GsmModem.enterSleepMode(full_mode)){
+		sei();
 		sleep_mode();
 		GsmModem.disableSleep();
 	}
-	/*if (s){
-		_sleep = GsmModem.enterSleepMode(full_mode);	
-	}else{
-		if (GsmModem.disableSleep())
-			_sleep = false;
-	}
-	if(_sleep){
-		//while ( !( UCSR1A & (1<<TXC1)) );
-		delay(1000);
-		sleep_mode();
-		sleep(false);
-	}*/
 };
 
 void AlarmClass::listClients(){
@@ -354,12 +346,12 @@ void AlarmClass::listClients(){
 	}
 }
 
-void AlarmClass::pinInterrupt(){
+bool AlarmClass::pinInterrupt(){
 	bool p = debounce(SENSOR_INT_PIN);
 	if (_pinInterrupt == p)
-		return;
+		return false;
 	_pinInterrupt = p;
-	event(true);	
+	return _event = true;	
 }
 
 bool debounce(uint8_t pin) {
@@ -378,5 +370,6 @@ void handleInterrupt() {
 };
 
 ISR(PCINT0_vect){
-	//handleInterrupt();
+	wdt_reset();
+	Alarm.pinInterrupt();
 }
