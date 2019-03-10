@@ -1,8 +1,10 @@
 ﻿#include "Alarm.h"
 #include "GsmModemClass.h"
 #include "Battery.h"
+#include "Commands.h"
 #include <avr/sleep.h>
 #include <avr/wdt.h>
+#include "PhoneBookClass.h"
 
 AlarmClass Alarm;
 
@@ -26,7 +28,7 @@ AlarmSMSMessage::~AlarmSMSMessage() {
 void AlarmSMSMessage::send(AlarmClient *client) {
 	if (_status != AL_MSG_SENDING)
 		return ;
-	GsmModem.sendSMS(client->_phone.c_str(), _data);
+	GsmModem.sendSMS(client->phone().c_str(), _data);
 	_status = AL_MSG_SENDING;
 }
 
@@ -101,60 +103,34 @@ void AlarmClass::handle() {
 	_pinInterrupt = debounce(SENSOR_INT_PIN);
 	//digitalWrite(DEFAULT_LED_PIN, LOW);
 	pci_disable();	
-	callAll();
-	textAll(_pinInterrupt ? F("Alarm: Open sensor!!!") : F("Alarm: Closed sensor!!!"));	
+	PhoneBook.callAll();
+	PhoneBook.textAll(_pinInterrupt ? F("Alarm: Open sensor!!!") : F("Alarm: Closed sensor!!!"));	
 	pci_enable();
 	//interrupt(false);																		//TODO сделать false когда было доставлено сообщения
 	//attachInterrupt(digitalPinToInterrupt(interruptPin), handleInterrupt, CHANGE);
 	//digitalWrite(DEFAULT_LED_PIN, HIGH);
 }
 
-void AlarmClass::textAll(const String &message) {
-	if(!message) return;
-	if (_clients.moveToStart())	{
-		do{
-			if (_clients.current()->canSend()) {
-				_clients.current()->text(message);
-			}
-		}while(_clients.next());		
-	}	
-}
 
-void AlarmClass::callAll() {
-	if(_clients.moveToStart()){
-		do{
-			if (_clients.current()->canSend()) {
-				_clients.current()->call();
-			}
-		}while(_clients.next());
-	}
-};
 
-void AlarmClass::_addClient(AlarmClient * client) {
+/*void AlarmClass::addClient(AlarmClient * client) {
+	if (!client)
+		return;
+	//if (PhoneBook.addContactToSIM(client)){
 	_clients.append(client);
+	//}
 }
 
 bool AlarmClass::removeClient(AlarmClient * client) {
-	if (!client)
-		return false;
-	if (client->root())
-		return false;
-	_clients.remove(client);	
-	return true;
-}
+if (!client)
+return false;
+if (client->root())
+return false;
+_clients.remove(client);
+return true;
+}*/
 
-AlarmClient* AlarmClass::hashClient(const String& phone){
-	if (_clients.length() == 0)
-		return NULL;
-	if(_clients.moveToStart()){
-		do{
-			if (phone.indexOf(_clients.current()->_phone)!=-1) {
-				return _clients.current();
-			}
-		}while(_clients.next());
-	}
-	return NULL;
-}
+
 
 void AlarmClass::fetchMessage(uint8_t index) {
 	String str = "";
@@ -173,7 +149,7 @@ void AlarmClass::fetchMessage(uint8_t index) {
 };
 
 bool AlarmClass::fetchCall(String& phone) {
-	_curentClient = hashClient(phone);	
+	_curentClient = PhoneBook.hashClient(phone);	
 	if (_curentClient){
 		_msgDTMF = "";
 		GsmModem.sendATCommand(F("ATA"), true);                  // ...отвечаем (поднимаем трубку)
@@ -200,11 +176,11 @@ void AlarmClass::parseSMS(String& msg) {
 	int secondIndex = msgheader.indexOf("\",\"", firstIndex);
 	msgphone = msgheader.substring(firstIndex, secondIndex);
 	
-	_curentClient = hashClient(msgphone);
+	_curentClient = PhoneBook.hashClient(msgphone);
 	if (!_curentClient){			// Если телефон в белом списке, то...				 
 		fetchCommand(msgbody);                  // ...выполняем команду
 	}else{
-		textAll("In come message from tel:" + msgphone + " "+msgbody);	//отправляем чужие сообщения 
+		PhoneBook.textAll("In come message from tel:" + msgphone + " "+msgbody);	//отправляем чужие сообщения 
 	}	
 }
 
@@ -251,57 +227,71 @@ bool AlarmClass::parseDTMF(String& msg) {
 
 bool AlarmClass::fetchCommand(String cmd) {	
 	switch (cmd.toInt()){
-		case 123:																//добавить клиента
+		case CMD_ADD_RESERVE:																//добавить клиента
 			if(!_curentClient->root())
 				return false;
 			onCommand([](const String& value) {
-				if(Alarm.createClient(value))
-					GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), String("Client: "+ value + "added").c_str());	
+				AlarmClient c(2,value);
+				if(!PhoneBook.addContactToSIM(&c,"Reserve"))
+					return;
+				if (PhoneBook.addReserve()){
+					Alarm.curentClient()->text(String("Client reserve added"));
+				}
 			});			
 		break;
-		case 321:																//удалить клиента
+		case CMD_DEL_RESERVE:																//удалить клиента
 			if(!_curentClient->root())
 				return false;
 			onCommand([](const String& value) {	
-				if(Alarm.removeClient(Alarm.hashClient(value)))
-					GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), String("Client: " + value + "removed").c_str());	
+				if(PhoneBook.delContactFromSIMM(2))
+					Alarm.curentClient()->text(String("Client reserve removed"));
+					//GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), String("Client: " + value + "removed").c_str());	
 			});						
 		break;
-		case 111:{																//список клиентов			
-			if (!_curentClient->root())
+		case CMD_ADD_ADMIN:
+			if(!PhoneBook.time_admin())
 				return false;
-			//if (_clients.size() == 0)
-			if (_clients.length() == 0)
-				return false;			
+			//AlarmClient c(1,value);
+			if(!PhoneBook.addContactToSIM(Alarm.curentClient(),"Admin"))
+				return false;
+			if (PhoneBook.addAdmin()){
+				Alarm.curentClient()->text(String("Client admin added"));
+			}
+		case CMD_LIST_CLIENT:{																//список клиентов			
+			if (!_curentClient->root())
+				return false;		
 			onCommand([](const String& value){
-				Alarm.listClients();	
+				Alarm.curentClient()->text(PhoneBook.listClients());	
 			});			
 			break;			
 		}
-		case 222:																//поставить на сигнализацию
+		case CMD_ALARM_ON:																//поставить на сигнализацию
 			if(_curentClient->safe())
 				onCommand([](const String& value) {
 					Alarm.safe(true);
-					GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), "guarded!!!");	
+					Alarm.curentClient()->text("guarded!!!");
+					//GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), "guarded!!!");	
 				});
 			else
 				return false;			
 		break;
-		case 333:																//снять с сигнализации
+		case CMD_ALARM_OFF:																//снять с сигнализации
 			if(_curentClient->safe())
 				onCommand([](const String& value) {
 				Alarm.safe(false);
-				GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), "not guarded!!!");	
+				Alarm.curentClient()->text("not guarded!!!");
+				//GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), "not guarded!!!");	
 			});
 			else
 				return false;
 		break;
-		case 444: {																//информация состояния модуля
+		case CMD_INFO: {																//информация состояния модуля
 			onCommand([](const String& value) {
 				String info = "Battery:" + (String)BATTERY->charge() + "%";
 				info += " Safe:" + (String)Alarm.safe();
-				info += " Sensor:" + (String)(debounce(Alarm.interruptPin())?"OPEN":"CLOSE");				
-				GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), info.c_str());	
+				info += " Sensor:" + (String)(debounce(Alarm.interruptPin())?"OPEN":"CLOSE");
+				Alarm.curentClient()->text(info);				
+				//GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), info.c_str());	
 			});			
 			break;
 		}/*case 541: {															//уснуть	
@@ -323,10 +313,10 @@ bool AlarmClass::fetchCommand(String cmd) {
 	return true;
 };
 
-bool AlarmClass::createClient(const String& phone){	
-	_addClient(new AlarmClient(phone,false, false,false));
-	return true;
-}
+/*bool AlarmClass::createClient(const String& phone){
+addClient(new AlarmClient(phone,false, false,false));
+return true;
+}*/
 
 void AlarmClass::sleep(bool full_mode) {
 	if(GsmModem.enterSleepMode(full_mode)){
@@ -336,15 +326,7 @@ void AlarmClass::sleep(bool full_mode) {
 	}
 };
 
-void AlarmClass::listClients(){
-	String msg = "";
-	if(_clients.moveToStart()){
-		do{
-			msg += _clients.current()->_phone + ":";
-		}while(_clients.next());
-		GsmModem.sendSMS(_curentClient->_phone.c_str(), msg.c_str());
-	}
-}
+
 
 bool AlarmClass::pinInterrupt(){
 	bool p = debounce(SENSOR_INT_PIN);

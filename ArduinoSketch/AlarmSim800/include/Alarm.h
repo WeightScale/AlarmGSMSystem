@@ -50,25 +50,38 @@ private:
 	AlarmMessage * _message;
 	void _queueMessage(AlarmMessage *dataMessage);
 	void _runQueue();
+	unsigned char _id;
 	bool _send;
 	bool _safe;
-	bool _root = false;
+	//bool _root = false;
+	String _phone;	
+protected:	
 public:
-	AlarmClient(const String phone, bool send = true, bool safe = false, bool root = false)
-		: _phone(phone),_send(send),_safe(safe),_root(root) {};
-	AlarmClient(char * p, bool s=true, bool r=false): _phone(p),_send(s),_root(r){};
-	AlarmClient(const String p, bool s = true) : _phone(p), _send(s) {};
+	AlarmClient(int id, const String& phone, bool send = true, bool safe = false/*, bool root = false*/)
+		: _id(id), _send(send),_safe(safe)/*,_root(root)*/ {	
+			_phone = phone;	
+		};
+	AlarmClient(int id, char * phone, bool send=true/*, bool r=false*/): _id(id), _send(send)/*,_root(r)*/{
+		_phone = String(phone);
+	};
+	AlarmClient(int id, String& phone, bool send = true) : _id(id), _send(send) {
+		_phone = phone;
+	};
+	/*AlarmClient(String p, bool s = true) : _send(s) {
+		//_phone = String(&p);
+	};*/
 	~AlarmClient() {if (_message != NULL)free(_message); };
+	String& phone(){return _phone;};
 	//bool operator ! (const AlarmClient& c){return true;};
-	//const bool operator !(const AlarmClient &c){return !(bool)c;};		
-	const String _phone;
+	//const bool operator !(const AlarmClient &c){return !(bool)c;};
 	bool canSend(){return _send;}; //ack is not pending
 	void text(const char * message, size_t len);
 	void text(const String &message);
 	void call();
-	bool root() {return _root;};
-	void root(bool root) {_root = root;};
+	bool root() {return _id == 1;};
+	//void root(bool root) {_root = root;};
 	bool safe() {return _safe;};
+	unsigned char id(){return _id;};	
 };
 
 //typedef std::function<void(String)> AlarmHandleCommand;
@@ -82,17 +95,17 @@ private:
 	bool _pinInterrupt;
 	//volatile byte interruptCounter = 0;
 	//const byte _interruptPin = SENSOR_INT_PIN;
-	LinkedList<AlarmClient *> _clients;
+	//LinkedList<AlarmClient *> _clients;
 	//AlarmClient* _clients[10];
 	//String _codeOnAlarm = "1234";
 	//String _codeOffAlarm = "4321";
-	AlarmClient *_curentClient;
+	AlarmClient* _curentClient;
 	
 public:
 	AlarmClass();
 	~AlarmClass();
 	String _msgDTMF = "";
-	AlarmClient* hashClient(const String& phone);
+	
 	//AlarmClient getClient(String phone);
 	void begin();
 	AlarmClient* curentClient() {return _curentClient;};
@@ -105,12 +118,10 @@ public:
 	void sleep(bool full_mode = false);
 	//bool sleep() {return _sleep;};
 	void handle();
-	void textAll(const char * message, size_t len);
-	void textAll(const String &message);
-	void callAll();
-	void _cleanBuffers();
-	void _addClient(AlarmClient * client); 
-	bool removeClient(AlarmClient * client);
+	
+	void cleanBuffers();
+	//void addClient(AlarmClient * client); 
+	//bool removeClient(AlarmClient * client);
 	void fetchMessage(uint8_t index);
 	bool fetchCall(String& phone);
 	void parseSMS(String& msg);
@@ -119,8 +130,8 @@ public:
 	void setStatusPinInt(bool pin) {_pinInterrupt = pin; };
 	bool getStatusPinInt() {return _pinInterrupt;};
 	byte interruptPin() {return SENSOR_INT_PIN;};
-	bool createClient(const String& phone);
-	void listClients();
+	//bool createClient(const String& phone);
+	
 	//size_t doStatus(JsonObject& json);
 	void onCommand(AlarmHandleCommand fn){_handleCommand = fn;};
 	void waitDTMF(unsigned long timeout = 10000);

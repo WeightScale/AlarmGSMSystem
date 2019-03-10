@@ -233,7 +233,7 @@ void LinkedList<T>::putFirstToLast(){
 template <class T>
 void LinkedList<T>::update(T elem)
 {
-	if(Search(elem))
+	if(search(elem))
 	_curr->element = elem;
 }
 

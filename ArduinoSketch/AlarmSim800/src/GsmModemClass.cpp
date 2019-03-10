@@ -22,8 +22,7 @@ void GsmModemClass::start() {
 	
 	reset();
 	while (sendATCommand(F("AT"), true).indexOf("OK") == -1) {};
-	while(!echoOff());	
-	while (sendATCommand(F("AT+CPBS=\"ME\""), true).indexOf("OK") == -1) {};
+	while(!echoOff());		
 	while (sendATCommand(F("AT+CLIP=1"), true).indexOf("OK") == -1) {};
 	while (sendATCommand(F("AT+CMGF=1;&W"), true).indexOf("OK") == -1) {};
 	while (sendATCommand(F("AT+DDET=1"), true).indexOf("OK") == -1) {};
@@ -129,7 +128,7 @@ bool GsmModemClass::sendSMS(const char* number, const char* text) {
 	Serial1.print(F("AT+CMGS=\""));    // command to send sms
 	Serial1.print(number);
 	Serial1.print(F("\"\r\n"));	
-	if(_checkResponse("READY TO RECEIVE", 20000)) {
+	if(_checkResponse(">", 20000)) {
 		Serial1.print(text);
 		Serial1.print("\r");
 		//delay(1000);
@@ -144,7 +143,7 @@ bool GsmModemClass::sendSMS(const char* number, uint8_t* text) {
 	Serial1.print(F("AT+CMGS=\""));     // command to send sms
 	Serial1.print(number);
 	Serial1.print(F("\"\r\n"));
-	if(_checkResponse("READY TO RECEIVE", 20000)) {
+	if(_checkResponse(">", 20000)) {
 		Serial1.print(String((char*)text));
 		Serial1.print("\r");
 		//_checkResponse(OK_, 1000);
@@ -159,7 +158,7 @@ String GsmModemClass::getSMS(uint8_t index){
 }
 
 void GsmModemClass::doCall(const String& phone, uint16_t timeout) {
-	Serial1.print(F("ATD"));      // command to send sms
+	Serial1.print(F("ATD"));      // command to do call
 	Serial1.print(phone);
 	Serial1.print(";\n");
 	String str = "";

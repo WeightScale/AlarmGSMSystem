@@ -248,6 +248,9 @@
     <Compile Include="include\Battery.h">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="include\Commands.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="include\GsmModemClass.h">
       <SubType>compile</SubType>
     </Compile>

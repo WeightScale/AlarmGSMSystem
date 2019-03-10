@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <avr/sleep.h>
 #include <avr/wdt.h>
+#include <avr/interrupt.h>
 
 /*End of auto generated code by Atmel studio */
 
@@ -10,18 +11,35 @@
 #include "Alarm.h"
 #include "Battery.h"
 #include "GsmModemClass.h"
+#include "PhoneBookClass.h"
 //Beginning of Auto generated function prototypes by Atmel Studio
 //End of Auto generated function prototypes by Atmel Studio
 String str = "";
 byte count_ring = 0;
 bool watchdog = false;
 
+TaskController taskController = TaskController();
+
 Task tasPowerDown([](){
 	//wakeup = false;	
 	Alarm.sleep();
 	tasPowerDown.updateCache();
 },10000);
-TaskController taskController = TaskController();
+
+void test(){
+	cli();
+	wdt_reset();
+	WDTCSR |= (1<<WDCE) | (1<<WDE);
+	WDTCSR = (0<<WDE) | (1<<WDIE)|(1<<WDP3)|(1<<WDP0);
+	sei();
+}
+
+Task taskTimeAdmin([]{
+	PhoneBook.time_admin(false);
+	taskController.remove(&taskTimeAdmin);
+	test();
+	tasPowerDown.resume();
+},60000);
 
 void setup(){
 	ACSR = (1<<ACD); //Turn off Analog Comparator - this removes about 1uA
@@ -37,33 +55,30 @@ void setup(){
 	SerialUSB.begin(9600);
 	Memory.init();
 	Alarm.begin();
-	Alarm._addClient(new AlarmClient("0500784234",true,true,true));
+	//Alarm._addClient(new AlarmClient("0500784234",true,true,true));
 	BATTERY = new BatteryClass();
 	BATTERY->onDischaged([](int charge) {
-		Alarm.textAll(F("Charge battery low "));
+		PhoneBook.textAll(F("Charge battery low "));
 		delay(1000);
 		Alarm.sleep(true);
 		BATTERY->updateCache();		
 	});
 	GsmModem.start();
-		
+	PhoneBook.init();	
 	//taskController.add(BATTERY);/**/	
-	taskController.add(&tasPowerDown);
+	//taskController.add(&tasPowerDown);
+	tasPowerDown.pause();
+	taskController.add(&taskTimeAdmin);
 	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-	
-	cli();
-	wdt_reset();
-	//MCUSR &= ~(1<<WDRF);
-	WDTCSR |= (1<<WDCE) | (1<<WDE);
-	/* Set new prescaler (time-out) value = 64K cycles (~0.5 s) */
-	WDTCSR = (0<<WDE) | (1<<WDIE)|(1<<WDP3)|(1<<WDP0);
-	sei();
+		
+	wdt_disable();
+	//test();
 }
-unsigned long time_sleep;
+unsigned int time_sleep;
 void loop(){	
 	if (watchdog){
 		//unsigned long t = millis();
-		time_sleep += 8000;
+		time_sleep += 8;	/* 8 секунд */
 		pci_enable();
 		if(Alarm.pinInterrupt()){
 			goto alarm;	
@@ -76,7 +91,7 @@ void loop(){
 		Alarm.sleep();
 	}
 	alarm:
-	wdt_reset();
+	//wdt_reset();
 	Alarm.handle();	
 	if (Serial1.available()){
 		str = GsmModem._readSerial();
@@ -96,7 +111,7 @@ void loop(){
 			int i = str.substring(str.indexOf(F("SM")) + 4, str.lastIndexOf("\r")).toInt();
 			Alarm.fetchMessage(i);			
 		}else if (str.indexOf(F("UNDER")) != -1){
-			Alarm.textAll(str);
+			PhoneBook.textAll(str);
 		}else if (str.startsWith(F("NO CARRIER"))){
 			Alarm._msgDTMF = "";
 			count_ring = 0;
