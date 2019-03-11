@@ -117,22 +117,16 @@ String PhoneBookClass::listClients(){
 }
 
 AlarmClient* PhoneBookClass::hashClient(const String& phone){
-	if (phone.indexOf(_admin->phone())!=-1) {
+	if (phone.length() < 10){
+		return nullptr;
+	}
+	
+	if(_time_admin){
+		return new AlarmClient(1,phone);
+	}else if (phone.indexOf(_admin->phone())>-1) {
 		return _admin;
 	}else if (phone.indexOf(_reserve->phone())!=-1) {
 		return _reserve;
-	}else if(_time_admin){
-		return new AlarmClient(1,phone);
 	}
 	return nullptr;
-	/*if (_contact.length() == 0)
-	return NULL;
-	if(_contact.moveToStart()){
-		do{
-			if (phone.indexOf(_contact.current()->phone())!=-1) {
-				return _contact.current();
-			}
-		}while(_contact.next());
-	}
-	return NULL;*/
 }

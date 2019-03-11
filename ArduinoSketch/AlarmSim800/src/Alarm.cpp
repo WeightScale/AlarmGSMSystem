@@ -57,7 +57,6 @@ void AlarmClient::text(const String &message) {
 void AlarmClient::call() {
 	GsmModem.onCallAccept([](int value) {
 		GsmModem.sendATCommand(F("ATH"), false);
-		Alarm.event( false);
 	});
 	GsmModem.doCall(_phone, 10000);
 };
@@ -106,6 +105,7 @@ void AlarmClass::handle() {
 	PhoneBook.callAll();
 	PhoneBook.textAll(_pinInterrupt ? F("Alarm: Open sensor!!!") : F("Alarm: Closed sensor!!!"));	
 	pci_enable();
+	event( false);
 	//interrupt(false);																		//TODO сделать false когда было доставлено сообщения
 	//attachInterrupt(digitalPinToInterrupt(interruptPin), handleInterrupt, CHANGE);
 	//digitalWrite(DEFAULT_LED_PIN, HIGH);
@@ -231,11 +231,14 @@ bool AlarmClass::fetchCommand(String cmd) {
 			if(!_curentClient->root())
 				return false;
 			onCommand([](const String& value) {
+				if(value.length() < 10)
+					return;
 				AlarmClient c(2,value);
 				if(!PhoneBook.addContactToSIM(&c,"Reserve"))
 					return;
 				if (PhoneBook.addReserve()){
-					Alarm.curentClient()->text(String("Client reserve added"));
+					//Alarm.curentClient()->text(String("Client reserve added"));	
+					PhoneBook.reserve()->call();				
 				}
 			});			
 		break;
@@ -248,23 +251,25 @@ bool AlarmClass::fetchCommand(String cmd) {
 					//GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), String("Client: " + value + "removed").c_str());	
 			});						
 		break;
-		case CMD_ADD_ADMIN:
+		case CMD_ADD_ADMIN:		
 			if(!PhoneBook.time_admin())
 				return false;
-			//AlarmClient c(1,value);
-			if(!PhoneBook.addContactToSIM(Alarm.curentClient(),"Admin"))
-				return false;
-			if (PhoneBook.addAdmin()){
-				Alarm.curentClient()->text(String("Client admin added"));
-			}
-		case CMD_LIST_CLIENT:{																//список клиентов			
+			onCommand([](const String& value) {
+				if(!PhoneBook.addContactToSIM(Alarm.curentClient(),"Admin"))
+					return;
+				if (PhoneBook.addAdmin()){
+					//Alarm.curentClient()->text(String("Client admin added"));
+					PhoneBook.admin()->call();
+				}
+			});
+		break;			
+		case CMD_LIST_CLIENT:																//список клиентов			
 			if (!_curentClient->root())
 				return false;		
 			onCommand([](const String& value){
 				Alarm.curentClient()->text(PhoneBook.listClients());	
 			});			
-			break;			
-		}
+		break;	
 		case CMD_ALARM_ON:																//поставить на сигнализацию
 			if(_curentClient->safe())
 				onCommand([](const String& value) {
@@ -285,7 +290,7 @@ bool AlarmClass::fetchCommand(String cmd) {
 			else
 				return false;
 		break;
-		case CMD_INFO: {																//информация состояния модуля
+		case CMD_INFO:																//информация состояния модуля
 			onCommand([](const String& value) {
 				String info = "Battery:" + (String)BATTERY->charge() + "%";
 				info += " Safe:" + (String)Alarm.safe();
@@ -293,8 +298,8 @@ bool AlarmClass::fetchCommand(String cmd) {
 				Alarm.curentClient()->text(info);				
 				//GsmModem.sendSMS(Alarm.curentClient()->_phone.c_str(), info.c_str());	
 			});			
-			break;
-		}/*case 541: {															//уснуть	
+		break;
+		/*case 541: {															//уснуть	
 			onCommand([](const String& value) {
 				bool f = (bool)value.toInt();
 				Alarm.sleep(f);

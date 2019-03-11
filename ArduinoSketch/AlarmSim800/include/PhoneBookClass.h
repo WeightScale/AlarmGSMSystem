@@ -22,6 +22,8 @@ public:
 	bool delContactFromSIMM(unsigned char id);
 	bool addReserve();
 	bool addAdmin();
+	AlarmClient* admin() {return _admin;};
+	AlarmClient* reserve() {return _reserve;};	
 	void textAll(const char * message, size_t len);
 	void textAll(const String &message);
 	void callAll();

@@ -66,7 +66,7 @@ void setup(){
 	GsmModem.start();
 	PhoneBook.init();	
 	//taskController.add(BATTERY);/**/	
-	//taskController.add(&tasPowerDown);
+	taskController.add(&tasPowerDown);
 	tasPowerDown.pause();
 	taskController.add(&taskTimeAdmin);
 	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
@@ -91,7 +91,7 @@ void loop(){
 		Alarm.sleep();
 	}
 	alarm:
-	//wdt_reset();
+	wdt_reset();
 	Alarm.handle();	
 	if (Serial1.available()){
 		str = GsmModem._readSerial();
